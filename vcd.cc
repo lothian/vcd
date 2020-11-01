@@ -368,10 +368,13 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
           for(int m=0; m < no; m++) {
             int em = e * no + m;
             int im = i * nmo + m;
+            int mi = m * nmo + i;
             int am = (a + no) * nmo + m;
             int ie = i * nmo + (e + no);
+            int me = m * nmo + (e + no);
+            int ei = (e + no) * nmo + i;
             double val = (f->get(e+no,e+no) - f->get(m, m))*(e==a)*(m==i);
-            val += L->get(am,ie) - L->get(ae,im);
+//            val -= TEI->get(am,ie) - TEI->get(ae,mi);
             G->set(ai, em, val);
           }
         }
@@ -394,7 +397,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 
       for(int a=0; a < nv; a++)
         for(int i=0; i < no; i++)
-          B->set(a,i, dm->get(a,i));
+          B->set(a,i, -dm->get(a,i));
 
       // Solve CPHF Equations
       for(int ai=0; ai < no*nv; ai++) ipiv[ai] = 0.0;
@@ -414,14 +417,14 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     // ================================================
 
     std::vector<SharedMatrix> halfS_deriv;
-    SharedMatrix halfdS(new Matrix("Half-Derivative Overlap", nv, no));
+    SharedMatrix halfdS(new Matrix("Half-Derivative Overlap", no, nv));
     SharedMatrix AAT_elec(new Matrix("AAT Electronic Component", natom*3, 3));
     SharedMatrix AAT_nuc(new Matrix("AAT Nuclear Component", natom*3, 3));
     ref->molecule()->geometry().print();
     for(int atom = 0; atom < natom; atom++) {
       halfS_deriv = mints->ao_overlap_half_deriv1("LEFT", atom);
       for(int coord=0; coord < 3; coord++) {
-        halfdS->transform(ref->Ca_subset("AO","VIR"), halfS_deriv[coord], ref->Ca_subset("AO","OCC"));
+        halfdS->transform(ref->Ca_subset("AO","OCC"), halfS_deriv[coord], ref->Ca_subset("AO","VIR"));
 	halfdS->scale(-1.0);
 	int R_coord = atom * 3 + coord;
         for(int B_coord = 0; B_coord < 3; B_coord++) {
@@ -430,10 +433,9 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 	  for(int a=0; a < nv; a++)
 	    for(int i=0; i < no; i++) {
               val += U_R[R_coord]->get(a,i) * U_B[B_coord]->get(a,i);
-              val += halfdS->get(a,i) * U_B[B_coord]->get(a,i);
+              val += halfdS->get(i,a) * U_B[B_coord]->get(a,i);
 	    }
-	  val *= 2.0;
-          AAT_elec->set(R_coord, B_coord, -2.0 * val);
+          AAT_elec->set(R_coord, B_coord, -4.0 * val);
 
 	  val = 0.0;
 	  for(int gamma=0; gamma < 3; gamma++) {
