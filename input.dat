@@ -33,7 +33,7 @@ symmetry c1
 }
 
 set {
-  basis sto-3g
+  basis 4-31g
   freeze_core false
   dertype none
   e_convergence 13

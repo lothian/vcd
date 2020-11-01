@@ -35,3 +35,7 @@ CMakeCache.txt
 CMakeFiles
 Makefile
 cmake_install.cmake
+
+timer.dat
+*.tar.gz
+*pycache*

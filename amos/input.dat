@@ -1,0 +1,31 @@
+# PYTHONPATH must include directory above plugin directory.
+#     Define either externally or here, then import plugin.
+sys.path.insert(0, './../..')
+import vcd
+
+molecule ethylene_oxide {
+O       0.0000000000        0.0000000000        1.6119363900
+C       0.0000000000       -1.3813890400       -0.7062143040
+C       0.0000000000        1.3813905700       -0.7062514120
+H      -1.7489765900       -2.3794725300       -1.1019539000
+H       1.7489765900       -2.3794725300       -1.1019539000
+H       1.7489765900        2.3794634300       -1.1020178200
+H      -1.7489765900        2.3794634300       -1.1020178200
+symmetry c1
+no_reorient
+no_com
+units bohr
+}
+
+set {
+  basis 4-31g
+  freeze_core false
+  dertype none
+  e_convergence 13
+  r_convergence 13
+  r_convergence 13
+  scf_type pk
+  print_mos true
+}
+
+gradient('mp2')

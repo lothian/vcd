@@ -51,7 +51,7 @@ using namespace std;
 
 namespace psi {
 
-int levi(int a, int b, int c);
+double levi(int a, int b, int c);
 
 extern "C" PSI_API
 int read_options(std::string name, Options& options)
@@ -174,6 +174,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   outfile->Printf("\tRHF total electronic energy = %20.12f\n", e1 + e2);
   outfile->Printf("\tRHF total energy            = %20.12f\n", e1 + e2 + enuc);
 
+  /*
   SharedMatrix Ftest(new Matrix("Testing Fock Matrix Build", nmo, nmo));
   for(int p=0; p < nmo; p++) {
     for(int q=0; q < nmo; q++) {
@@ -187,6 +188,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     }
   }
   Ftest->print("outfile");
+  */
 
   // =============
   // RHF Gradient
@@ -385,13 +387,14 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     int *ipiv = init_int_array(no*nv);
 
     std::vector<SharedMatrix> angmom = mints->so_angular_momentum();
+    SharedMatrix dm(new Matrix("Magnetic Moment Integrals", nv, no));
     for(int coord=0; coord < 3; coord++) {
-      angmom[coord]->scale(-0.5);
-      angmom[coord]->transform(ref->Ca());
+      dm->transform(ref->Ca_subset("AO","VIR"), angmom[coord], ref->Ca_subset("AO","OCC"));
+      dm->scale(-0.5);
 
       for(int a=0; a < nv; a++)
         for(int i=0; i < no; i++)
-          B->set(a,i, -angmom[coord]->get(a+no, i));
+          B->set(a,i, dm->get(a,i));
 
       // Solve CPHF Equations
       for(int ai=0; ai < no*nv; ai++) ipiv[ai] = 0.0;
@@ -411,11 +414,15 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     // ================================================
 
     std::vector<SharedMatrix> halfS_deriv;
+    SharedMatrix halfdS(new Matrix("Half-Derivative Overlap", nv, no));
     SharedMatrix AAT_elec(new Matrix("AAT Electronic Component", natom*3, 3));
     SharedMatrix AAT_nuc(new Matrix("AAT Nuclear Component", natom*3, 3));
+    ref->molecule()->geometry().print();
     for(int atom = 0; atom < natom; atom++) {
-      halfS_deriv = mints->mo_overlap_half_deriv1("LEFT", atom, ref->Ca(), ref->Ca());
+      halfS_deriv = mints->ao_overlap_half_deriv1("LEFT", atom);
       for(int coord=0; coord < 3; coord++) {
+        halfdS->transform(ref->Ca_subset("AO","VIR"), halfS_deriv[coord], ref->Ca_subset("AO","OCC"));
+	halfdS->scale(-1.0);
 	int R_coord = atom * 3 + coord;
         for(int B_coord = 0; B_coord < 3; B_coord++) {
 
@@ -423,15 +430,19 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 	  for(int a=0; a < nv; a++)
 	    for(int i=0; i < no; i++) {
               val += U_R[R_coord]->get(a,i) * U_B[B_coord]->get(a,i);
-              val +=  halfS_deriv[coord]->get(a+no, i) * U_B[B_coord]->get(a,i);
+              val += halfdS->get(a,i) * U_B[B_coord]->get(a,i);
 	    }
+	  val *= 2.0;
           AAT_elec->set(R_coord, B_coord, -2.0 * val);
 
+	  val = 0.0;
 	  for(int gamma=0; gamma < 3; gamma++) {
-	    double geom = ref->molecule()->geometry().get(atom, coord);
+	    double geom = ref->molecule()->geometry().get(atom, gamma);
 	    double z = ref->molecule()->Z(atom);
-            AAT_nuc->set(R_coord, B_coord, levi(coord, B_coord, gamma) * geom * z / 2.0);
+	    val += levi(coord, B_coord, gamma) * geom * z / 4.0;
 	  }
+          AAT_nuc->set(R_coord, B_coord, val);
+
         } // B_coord
       } // coord (R)
     } // atom
@@ -449,8 +460,8 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 }
 
 /* A stupid Levi-Civita evaluator */
-int levi(int a, int b, int c) {
-  int val=0;
+double levi(int a, int b, int c) {
+  double val=0;
   int x=0, y=1, z=2;
 
   if(a==x && b==y && c==z) val=1;
@@ -467,3 +478,6 @@ int levi(int a, int b, int c) {
 
 } // End namespaces
 
+//	    outfile->Printf("atom = %d, (alpha, beta, gamma) = (%d, %d, %d), z = %3.1f, geom = %20.14f\n", atom, coord, B_coord, gamma, z, geom);
+//	    if(atom==1 && coord==2 && B_coord==0 && gamma==1) 
+//	      outfile->Printf("R_coord = %d, B_coord = %d, levi(2, 0, 1) = %d, val = %20.14f\n", R_coord, B_coord, levi(coord, B_coord, gamma), levi(coord, B_coord, gamma) * geom * z / 2.0);
