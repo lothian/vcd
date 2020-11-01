@@ -374,7 +374,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
             int me = m * nmo + (e + no);
             int ei = (e + no) * nmo + i;
             double val = (f->get(e+no,e+no) - f->get(m, m))*(e==a)*(m==i);
-//            val -= TEI->get(am,ie) - TEI->get(ae,mi);
+            val += L->get(am,ie) - L->get(ae,im);
             G->set(ai, em, val);
           }
         }
@@ -397,7 +397,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 
       for(int a=0; a < nv; a++)
         for(int i=0; i < no; i++)
-          B->set(a,i, -dm->get(a,i));
+          B->set(a,i, dm->get(a,i));
 
       // Solve CPHF Equations
       for(int ai=0; ai < no*nv; ai++) ipiv[ai] = 0.0;
@@ -425,7 +425,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
       halfS_deriv = mints->ao_overlap_half_deriv1("LEFT", atom);
       for(int coord=0; coord < 3; coord++) {
         halfdS->transform(ref->Ca_subset("AO","OCC"), halfS_deriv[coord], ref->Ca_subset("AO","VIR"));
-	halfdS->scale(-1.0);
+//	halfdS->scale(-1.0);
 	int R_coord = atom * 3 + coord;
         for(int B_coord = 0; B_coord < 3; B_coord++) {
 
@@ -435,7 +435,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
               val += U_R[R_coord]->get(a,i) * U_B[B_coord]->get(a,i);
               val += halfdS->get(i,a) * U_B[B_coord]->get(a,i);
 	    }
-          AAT_elec->set(R_coord, B_coord, -4.0 * val);
+          AAT_elec->set(R_coord, B_coord, 2.0 * val);
 
 	  val = 0.0;
 	  for(int gamma=0; gamma < 3; gamma++) {
@@ -479,7 +479,3 @@ double levi(int a, int b, int c) {
 
 
 } // End namespaces
-
-//	    outfile->Printf("atom = %d, (alpha, beta, gamma) = (%d, %d, %d), z = %3.1f, geom = %20.14f\n", atom, coord, B_coord, gamma, z, geom);
-//	    if(atom==1 && coord==2 && B_coord==0 && gamma==1) 
-//	      outfile->Printf("R_coord = %d, B_coord = %d, levi(2, 0, 1) = %d, val = %20.14f\n", R_coord, B_coord, levi(coord, B_coord, gamma), levi(coord, B_coord, gamma) * geom * z / 2.0);

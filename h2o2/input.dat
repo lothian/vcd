@@ -1,0 +1,22 @@
+sys.path.insert(0, './../..')
+import vcd
+
+molecule h2o2 {
+    O       0.0000000000        1.3192641900       -0.0952542913
+    O      -0.0000000000       -1.3192641900       -0.0952542913
+    H       1.6464858700        1.6841036400        0.7620343300
+    H      -1.6464858700       -1.6841036400        0.7620343300
+symmetry c1
+units bohr
+noreorient
+no_com
+}
+
+set {
+  basis sto-3g
+  scf_type pk
+  e_convergence 13
+  d_convergence 13
+}
+
+gradient('mp2')
