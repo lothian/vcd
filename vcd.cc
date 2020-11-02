@@ -38,6 +38,7 @@
 #include "psi4/libtrans/integraltransform.h"
 #include "psi4/libmints/matrix.h"
 #include "psi4/libmints/vector.h"
+#include "psi4/libmints/dipole.h"
 #include <map>
 
 #include "hamiltonian.h"
@@ -127,11 +128,6 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   outfile->Printf("\tNumber of atoms         = %d\n", natom);
 
   shared_ptr<MintsHelper> mints(new MintsHelper(ref->basisset(), options, 0));
-  // shared_ptr<Perturbation> mu(new Perturbation("Mu", ref, mints, false));
-  // mu->print(0, "outfile");
-  // std::vector<SharedMatrix> dipole = mints->so_dipole();
-  // dipole[0]->transform(ref->Ca()); 
-  // dipole[0]->print("outfile");
 
   // Prepare spin-adapted TEIs
   SharedMatrix TEI = mints->mo_eri(ref->Ca(), ref->Ca(), ref->Ca(), ref->Ca());
@@ -174,21 +170,29 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   outfile->Printf("\tRHF total electronic energy = %20.12f\n", e1 + e2);
   outfile->Printf("\tRHF total energy            = %20.12f\n", e1 + e2 + enuc);
 
-  /*
-  SharedMatrix Ftest(new Matrix("Testing Fock Matrix Build", nmo, nmo));
-  for(int p=0; p < nmo; p++) {
-    for(int q=0; q < nmo; q++) {
-      double val = h->get(p,q);    
-      for(int i=0; i < no; i++) {
-        int pi = p * nmo + i;
-        int qi = q * nmo + i;
-        val += L->get(pi, qi);
-      }
-      Ftest->set(p,q,val);
+  // ==================
+  // RHF Dipole Moment
+  // ==================
+  std::string cart = "XYZ";
+  std::vector<SharedMatrix> dipole = mints->ao_dipole();
+  SharedMatrix mu(new Matrix("MO Basis Electric Dipole Integrals", no, no));
+  outfile->Printf("\n\tElectric Dipole Moment:\n");
+  for(int coord=0; coord < 3; coord++) {
+    mu->transform(ref->Ca_subset("AO", "OCC"), dipole[coord], ref->Ca_subset("AO", "OCC"));   
+    double dipmom_e=0.0;
+    for(int i=0; i < no; i++) dipmom_e += mu->get(i,i);
+    dipmom_e *= 2.0;
+
+    double dipmom_n=0.0;
+    for(int atom=0; atom < natom; atom++) {
+      double geom = ref->molecule()->geometry().get(atom, coord);
+      double z = ref->molecule()->Z(atom);
+      dipmom_n += geom * z;
     }
+
+    outfile->Printf("\tmu_e(%c) = %20.14f \t mu_n(%c) = %20.14f \t mu(%c) = %20.14f\n", cart[coord], dipmom_e, cart[coord], dipmom_n, cart[coord], dipmom_e + dipmom_n);
   }
-  Ftest->print("outfile");
-  */
+  outfile->Printf("\n");
 
   // =============
   // RHF Gradient
@@ -246,9 +250,10 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   grad->print("outfile");
 
   std::vector<SharedMatrix> U_R; // CPHF coefficients for nuclear coordinate perturbations
+  std::vector<SharedMatrix> U_F; // CPHF coefficients for electric field perturbations
   {
     // ================================================
-    // CPHF Equations (nuclear coordinate perturbation)
+    // CPHF Equations (real perturbations)
     // ================================================
 
     // MO Hessian for real perturbations
@@ -274,7 +279,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   
     SharedMatrix Gclone = G->clone();
   
-    // CPHF for nuclear coordinate perturbations
+    // CPHF for nuclear-coordinate and electric-field perturbations
     SharedMatrix B(new Matrix("CPHF RHS Nuclear Coordinates", nv, no));
     double **Bp = B->pointer();
     int *ipiv = init_int_array(no*nv);
@@ -350,7 +355,25 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 
       } // coord
     } // atom
-  } // CPHF(R)
+
+    // Electric-Field Response
+    SharedMatrix BF(new Matrix("CPHF RHS Electric Field", nv, no));
+    double **BFp = BF->pointer();
+    for(int coord=0; coord < 3; coord++) {
+      BF->transform(ref->Ca_subset("AO","VIR"), dipole[coord], ref->Ca_subset("AO","OCC"));
+      BF->scale(-1.0);
+      for(int ai=0; ai < no*nv; ai++) ipiv[ai] = 0.0;
+      int errcod = C_DGESV(nv*no, 1, Gp[0], nv*no, ipiv, BFp[0], nv*no);
+      G->copy(Gclone); // restore the MO Hessian
+      SharedMatrix U = BF->clone();
+      std::string s = "CPHF Coefficients for F(";
+      s.push_back(cart[coord]);
+      s += ")";
+      U->set_name(s);
+      U->print();
+      U_F.push_back(U);
+    }
+  } // CPHF(R, F)
 
   std::vector<SharedMatrix> U_B; // CPHF coefficients for magnetic field perturbations
   {
@@ -410,6 +433,25 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
       U_B.push_back(U);
     } // coord
   } // CPHF(B) 
+
+    // ================================================
+    // HF APTs
+    // ================================================
+  {
+    SharedMatrix APT_n(new Matrix("APT Nuclear Component", natom*3, 3));
+    SharedMatrix APT_e1 = mints->dipole_grad(ref->Da_subset("AO"));
+    APT_e1->scale(2.0);
+    SharedMatrix APT_e2;
+    APT_e2->copy(APT_e1);
+
+    // Gradient of nuclear dipole moment
+    for(int atom=0; atom < natom; atom++) {
+      double z = ref->molecule()->Z(atom);
+      APT_n->set(atom * 3 + 0, 0, z);
+      APT_n->set(atom * 3 + 1, 1, z);
+      APT_n->set(atom * 3 + 2, 2, z);
+    }
+  }
 
   {
     // ================================================
