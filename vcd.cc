@@ -361,7 +361,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     double **BFp = BF->pointer();
     for(int coord=0; coord < 3; coord++) {
       BF->transform(ref->Ca_subset("AO","VIR"), dipole[coord], ref->Ca_subset("AO","OCC"));
-      BF->scale(-1.0);
+      // BF->scale(-1.0);
       for(int ai=0; ai < no*nv; ai++) ipiv[ai] = 0.0;
       int errcod = C_DGESV(nv*no, 1, Gp[0], nv*no, ipiv, BFp[0], nv*no);
       G->copy(Gclone); // restore the MO Hessian
@@ -438,19 +438,83 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     // HF APTs
     // ================================================
   {
-    SharedMatrix APT_n(new Matrix("APT Nuclear Component", natom*3, 3));
+    SharedMatrix APT1(new Matrix("APT Total (Formulation 1)", natom*3, 3));
+    SharedMatrix APT2(new Matrix("APT Total (Formulation 2)", natom*3, 3));
+
+    // Contribution of skeleton derivative integrals
     SharedMatrix APT_e1 = mints->dipole_grad(ref->Da_subset("AO"));
+    SharedMatrix APT_e2 = mints->dipole_grad(ref->Da_subset("AO"));
     APT_e1->scale(2.0);
-    SharedMatrix APT_e2;
-    APT_e2->copy(APT_e1);
+    APT_e2->scale(2.0);
+
+    std::vector<SharedMatrix> Mu = mints->ao_dipole();
+    for(int coord=0; coord < 3; coord++) Mu[coord]->transform(ref->Ca());
+
+    for(int atom=0; atom < natom; atom++) {
+      S_deriv = mints->mo_oei_deriv1("OVERLAP", atom, ref->Ca(), ref->Ca());
+      h_deriv = mints->mo_oei_deriv1("KINETIC", atom, ref->Ca(), ref->Ca());
+      V_deriv = mints->mo_oei_deriv1("POTENTIAL", atom, ref->Ca(), ref->Ca());
+      for(int coord=0; coord < 3; coord++) {
+        int R_coord = atom * 3 + coord;
+        h_deriv[coord]->add(V_deriv[coord]);
+        for(int dip_coord=0; dip_coord < 3; dip_coord++) {
+
+          // Contribution of overlap derivatives
+          double val=0;
+          for(int i=0; i < no; i++) {
+            for(int j=0; j < no; j++) {
+              val += -2.0 * S_deriv[coord]->get(i,j) * Mu[dip_coord]->get(i,j);
+            } 
+          }
+          APT_e1->add(R_coord, dip_coord, val);
+
+          // Contribution of CPHF(R) coefficients
+          val=0;
+          for(int a=0; a < nv; a++) {
+            for(int i=0; i < no; i++) {
+              val += +4.0 * U_R[R_coord]->get(a,i) * Mu[dip_coord]->get(a+no,i);
+            }
+          }
+          APT_e1->add(R_coord, dip_coord, val);
+
+          // Contribution of CPHF(F) coefficients
+          val=0;
+          for(int a=0; a < nv; a++) {
+            for(int i=0; i < no; i++) {
+              val += -4.0 * U_F[dip_coord]->get(a,i) * h_deriv[coord]->get(a+no,i);
+              val += +4.0 * U_F[dip_coord]->get(a,i) * S_deriv[coord]->get(a+no,i)  * f->get(i,i);
+            }
+          }
+          APT_e2->add(R_coord, dip_coord, val);
+
+          // Contribution of overlap derivatives
+          val=0;
+          for(int i=0; i < no; i++) {
+            val += -2.0 * S_deriv[coord]->get(i,i) * Mu[dip_coord]->get(i,i);
+          }
+          APT_e2->add(R_coord, dip_coord, val);
+
+        } // dip_coord
+      } // atom coord
+    } // atom
 
     // Gradient of nuclear dipole moment
+    SharedMatrix APT_n(new Matrix("APT Nuclear Component", natom*3, 3));
     for(int atom=0; atom < natom; atom++) {
       double z = ref->molecule()->Z(atom);
       APT_n->set(atom * 3 + 0, 0, z);
       APT_n->set(atom * 3 + 1, 1, z);
       APT_n->set(atom * 3 + 2, 2, z);
     }
+    APT_n->print();
+
+    APT1->add(APT_e1);
+    APT1->add(APT_n);
+    APT1->print();
+
+    APT2->add(APT_e2);
+    APT2->add(APT_n);
+    APT2->print();
   }
 
   {
