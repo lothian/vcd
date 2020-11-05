@@ -481,17 +481,15 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
           val=0;
           for(int a=0; a < nv; a++) {
             for(int i=0; i < no; i++) {
-              val += -4.0 * U_F[dip_coord]->get(a,i) * h_deriv[coord]->get(a+no,i);
-              val += +4.0 * U_F[dip_coord]->get(a,i) * S_deriv[coord]->get(a+no,i)  * f->get(i,i);
+              val -= 4.0 * U_F[dip_coord]->get(a,i) * h_deriv[coord]->get(a+no,i);
+              val += 4.0 * U_F[dip_coord]->get(a,i) * S_deriv[coord]->get(a+no,i)  * f->get(i,i);
             }
           }
           APT_e2->add(R_coord, dip_coord, val);
 
           // Contribution of overlap derivatives
           val=0;
-          for(int i=0; i < no; i++) {
-            val += -2.0 * S_deriv[coord]->get(i,i) * Mu[dip_coord]->get(i,i);
-          }
+          for(int i=0; i < no; i++) val -= 2.0 * S_deriv[coord]->get(i,i) * Mu[dip_coord]->get(i,i);
           APT_e2->add(R_coord, dip_coord, val);
 
         } // dip_coord
