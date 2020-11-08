@@ -249,6 +249,51 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   grad->add(nucgrad);
   grad->print("outfile");
 
+  // Build skeleton Fock derivatives for later
+  std::vector<SharedMatrix> F_deriv;
+  {
+    SharedMatrix L_deriv(new Matrix("Spin-Adapted TEI Derivatives", nmo*nmo, nmo*nmo));
+    SharedMatrix dF(new Matrix("Skeleton Fock Derivative", nmo, nmo));
+    for(int atom=0; atom < natom; atom++) {
+      h_deriv = mints->mo_oei_deriv1("KINETIC", atom, ref->Ca(), ref->Ca());
+      V_deriv = mints->mo_oei_deriv1("POTENTIAL", atom, ref->Ca(), ref->Ca());
+      TEI_deriv = mints->mo_tei_deriv1(atom, ref->Ca(), ref->Ca(), ref->Ca(), ref->Ca());
+      for(int coord=0; coord < 3; coord++) {
+        // Build spin adapted TEI derivs for current coordinate
+        for(int p=0; p < nmo; p++)
+          for(int q=0; q < nmo; q++) {
+            int pq = p * nmo + q;
+            for(int r=0; r < nmo; r++) {
+              int pr = p * nmo + r;
+              for(int s=0; s < nmo; s++) {
+                int rs = r * nmo + s;
+                int qs = q * nmo + s;
+                int ps = p * nmo + s;
+                int qr = q * nmo + r;
+                L_deriv->set(pq,rs, 2.0 * TEI_deriv[coord]->get(pr,qs) - TEI_deriv[coord]->get(ps,qr));
+              }
+            }
+          }
+        std::string s = "Skeleton Fock Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
+        dF->set_name(s);
+        h_deriv[coord]->add(V_deriv[coord]);
+        for(int p=0; p < nmo; p++) {
+          for(int q=0; q < nmo; q++) {
+            double val = h_deriv[coord]->get(p,q);
+            for(int i=0; i < no; i++) {
+              int pi = p * nmo + i;
+              int qi = q * nmo + i;
+              val += L_deriv->get(pi,qi);
+            }
+            dF->set(p, q, val);
+          } // q
+        } // p
+
+        F_deriv.push_back(dF->clone());
+      } // coord
+    } // atom
+  } // skeleton fock derivative build
+
   std::vector<SharedMatrix> U_R; // CPHF coefficients for nuclear coordinate perturbations
   std::vector<SharedMatrix> U_F; // CPHF coefficients for electric field perturbations
   {
@@ -283,53 +328,14 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     SharedMatrix B(new Matrix("CPHF RHS Nuclear Coordinates", nv, no));
     double **Bp = B->pointer();
     int *ipiv = init_int_array(no*nv);
-    SharedMatrix F_deriv(new Matrix("Skeleton Fock Derivative", nmo, nmo));
-    SharedMatrix L_deriv(new Matrix("Spin-Adapted TEI Derivatives", nmo*nmo, nmo*nmo));
     for(int atom=0; atom < natom; atom++) {
       S_deriv = mints->mo_oei_deriv1("OVERLAP", atom, ref->Ca(), ref->Ca());
-      h_deriv = mints->mo_oei_deriv1("KINETIC", atom, ref->Ca(), ref->Ca());
-      V_deriv = mints->mo_oei_deriv1("POTENTIAL", atom, ref->Ca(), ref->Ca());
-      TEI_deriv = mints->mo_tei_deriv1(atom, ref->Ca(), ref->Ca(), ref->Ca(), ref->Ca());
       for(int coord=0; coord < 3; coord++) {
-        // Build spin adapted TEI derivs for current coordinate
-        for(int p=0; p < nmo; p++)
-          for(int q=0; q < nmo; q++) {
-            int pq = p * nmo + q;
-            for(int r=0; r < nmo; r++) {
-              int pr = p * nmo + r;
-              for(int s=0; s < nmo; s++) {
-                int rs = r * nmo + s;
-                int qs = q * nmo + s;
-                int ps = p * nmo + s;
-                int qr = q * nmo + r;
-                L_deriv->set(pq,rs, 2.0 * TEI_deriv[coord]->get(pr,qs) - TEI_deriv[coord]->get(ps,qr));
-              }
-            }
-          }
-  
-        // Skeleton Fock matrix derivative
-        std::string s = "Skeleton Fock Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
-        F_deriv->set_name(s);
-        h_deriv[coord]->add(V_deriv[coord]);
-        for(int p=0; p < nmo; p++) {
-          for(int q=0; q < nmo; q++) {
-            double val = h_deriv[coord]->get(p,q);
-            for(int i=0; i < no; i++) {
-              int pi = p * nmo + i;
-              int qi = q * nmo + i;
-              int pq = p * nmo + q;
-              int ii = i * nmo + i;
-              int iq = i * nmo + q;
-              val += L_deriv->get(pi,qi);
-            }         
-            F_deriv->set(p, q, val);
-          } // q
-        } // p
-  
+        int R_coord = atom * 3 + coord;
         // CPHF B vector
         for(int a=0; a < nv; a++) {
           for(int i=0; i < no; i++) {
-            double val = F_deriv->get(a+no, i);
+            double val = F_deriv[R_coord]->get(a+no, i);
             val -= S_deriv[coord]->get(a+no, i) * f->get(i, i);
             for(int m=0; m < no; m++)
               for(int n=0; n < no; n++) {
@@ -348,7 +354,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
         int errcod = C_DGESV(nv*no, 1, Gp[0], nv*no, ipiv, Bp[0], nv*no);
         G->copy(Gclone); // restore the MO Hessian
         SharedMatrix U = B->clone();
-        s = "CPHF Coefficients for R(" + to_string(atom) + ", " + to_string(coord) + ")";
+        std::string s = "CPHF Coefficients for R(" + to_string(atom) + ", " + to_string(coord) + ")";
         U->set_name(s);
         U->print();
         U_R.push_back(U);
@@ -373,6 +379,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
       U->print();
       U_F.push_back(U);
     }
+
   } // CPHF(R, F)
 
   std::vector<SharedMatrix> U_B; // CPHF coefficients for magnetic field perturbations
@@ -452,11 +459,8 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 
     for(int atom=0; atom < natom; atom++) {
       S_deriv = mints->mo_oei_deriv1("OVERLAP", atom, ref->Ca(), ref->Ca());
-      h_deriv = mints->mo_oei_deriv1("KINETIC", atom, ref->Ca(), ref->Ca());
-      V_deriv = mints->mo_oei_deriv1("POTENTIAL", atom, ref->Ca(), ref->Ca());
       for(int coord=0; coord < 3; coord++) {
         int R_coord = atom * 3 + coord;
-        h_deriv[coord]->add(V_deriv[coord]);
         for(int dip_coord=0; dip_coord < 3; dip_coord++) {
 
           // Contribution of overlap derivatives
@@ -481,7 +485,7 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
           val=0;
           for(int a=0; a < nv; a++) {
             for(int i=0; i < no; i++) {
-              val -= 4.0 * U_F[dip_coord]->get(a,i) * h_deriv[coord]->get(a+no,i);
+              val -= 4.0 * U_F[dip_coord]->get(a,i) * F_deriv[R_coord]->get(a+no,i);
               val += 4.0 * U_F[dip_coord]->get(a,i) * S_deriv[coord]->get(a+no,i)  * f->get(i,i);
             }
           }
@@ -490,6 +494,18 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
           // Contribution of overlap derivatives
           val=0;
           for(int i=0; i < no; i++) val -= 2.0 * S_deriv[coord]->get(i,i) * Mu[dip_coord]->get(i,i);
+          APT_e2->add(R_coord, dip_coord, val);
+
+          val=0;
+          for(int i=0; i < no; i++) {
+            for(int e=0; e < nv; e++) {
+              int ie = i * nmo + (e + no);
+              for(int m=0; m < no; m++) {
+                int im = i * nmo + m; 
+                val += 4.0 * U_F[dip_coord]->get(e,m) * L->get(ie,im) * S_deriv[coord]->get(i,i);
+              }
+            }
+          }
           APT_e2->add(R_coord, dip_coord, val);
 
         } // dip_coord
