@@ -190,9 +190,61 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
       dipmom_n += geom * z;
     }
 
-    outfile->Printf("\tmu_e(%c) = %20.14f \t mu_n(%c) = %20.14f \t mu(%c) = %20.14f\n", cart[coord], dipmom_e, cart[coord], dipmom_n, cart[coord], dipmom_e + dipmom_n);
+    outfile->Printf("\tmu_e(%c) = %20.14f \t mu_n(%c) = %20.14f \t mu(%c) = %20.14f\n", 
+                    cart[coord], dipmom_e, cart[coord], dipmom_n, cart[coord], dipmom_e + dipmom_n);
   }
   outfile->Printf("\n");
+
+  // ====================
+  // Derivative integrals
+  // ====================
+  std::vector<SharedMatrix> S_deriv;
+  std::vector<SharedMatrix> F_deriv;
+
+  {
+    SharedMatrix L_deriv(new Matrix("Spin-Adapted TEI Derivatives", nmo*nmo, nmo*nmo));
+    SharedMatrix dF(new Matrix("Skeleton Fock Derivative", nmo, nmo));
+    SharedMatrix dS(new Matrix("Skeleton Fock Derivative", nmo, nmo));
+    for(int atom=0; atom < natom; atom++) {
+      h_deriv = mints->mo_oei_deriv1("KINETIC", atom, ref->Ca(), ref->Ca());
+      V_deriv = mints->mo_oei_deriv1("POTENTIAL", atom, ref->Ca(), ref->Ca());
+      TEI_deriv = mints->mo_tei_deriv1(atom, ref->Ca(), ref->Ca(), ref->Ca(), ref->Ca());
+      for(int coord=0; coord < 3; coord++) {
+        // Build spin adapted TEI derivs for current coordinate
+        for(int p=0; p < nmo; p++)
+          for(int q=0; q < nmo; q++) {
+            int pq = p * nmo + q;
+            for(int r=0; r < nmo; r++) {
+              int pr = p * nmo + r;
+              for(int s=0; s < nmo; s++) {
+                int rs = r * nmo + s;
+                int qs = q * nmo + s;
+                int ps = p * nmo + s;
+                int qr = q * nmo + r;
+                L_deriv->set(pq,rs, 2.0 * TEI_deriv[coord]->get(pr,qs) - TEI_deriv[coord]->get(ps,qr));
+              }
+            }
+          }
+        std::string s = "Skeleton Fock Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
+        dF->set_name(s);
+        h_deriv[coord]->add(V_deriv[coord]);
+        for(int p=0; p < nmo; p++) {
+          for(int q=0; q < nmo; q++) {
+            double val = h_deriv[coord]->get(p,q);
+            for(int i=0; i < no; i++) {
+              int pi = p * nmo + i;
+              int qi = q * nmo + i;
+              val += L_deriv->get(pi,qi);
+            }
+            dF->set(p, q, val);
+          } // q
+        } // p
+
+        F_deriv.push_back(dF->clone());
+      } // coord
+    } // atom
+  } // skeleton fock derivative build
+
 
   // =============
   // RHF Gradient
