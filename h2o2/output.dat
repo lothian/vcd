@@ -1,9 +1,9 @@
 
     -----------------------------------------------------------------------
           Psi4: An Open-Source Ab Initio Electronic Structure Package
-                               Psi4 undefined 
+                               Psi4 1.4a2.dev1127 
 
-                         Git: Rev {master} 91a87a5 dirty
+                         Git: Rev {master} 68333ef 
 
 
     D. G. A. Smith, L. A. Burns, A. C. Simmonett, R. M. Parrish,
@@ -30,11 +30,11 @@
     -----------------------------------------------------------------------
 
 
-    Psi4 started on: Sunday, 08 November 2020 12:07PM
+    Psi4 started on: Sunday, 08 November 2020 07:38PM
 
-    Process ID: 68322
-    Host:       ganymede.local
-    PSIDATADIR: /Users/crawdad/share/psi4
+    Process ID: 96430
+    Host:       rigel.local
+    PSIDATADIR: /Users/crawdad/psi4/share/psi4
     Memory:     500.0 MiB
     Threads:    1
     
@@ -68,8 +68,8 @@ gradient('mp2')
 Scratch directory: /tmp/
 gradient() will perform analytic gradient computation.
 
-*** tstart() called on ganymede.local
-*** at Sun Nov  8 12:07:48 2020
+*** tstart() called on rigel.local
+*** at Sun Nov  8 19:38:29 2020
 
    => Loading Basis Set <=
 
@@ -250,13 +250,13 @@ Properties computed using the SCF density matrix
      X:    -0.0000      Y:    -0.0000      Z:     1.3052     Total:     1.3052
 
 
-*** tstop() called on ganymede.local at Sun Nov  8 12:07:48 2020
+*** tstop() called on rigel.local at Sun Nov  8 19:38:29 2020
 Module time:
-	user time   =       0.32 seconds =       0.01 minutes
+	user time   =       0.33 seconds =       0.01 minutes
 	system time =       0.01 seconds =       0.00 minutes
 	total time  =          0 seconds =       0.00 minutes
 Total time:
-	user time   =       0.32 seconds =       0.01 minutes
+	user time   =       0.33 seconds =       0.01 minutes
 	system time =       0.01 seconds =       0.00 minutes
 	total time  =          0 seconds =       0.00 minutes
  MINTS: Wrapper to libmints.
@@ -366,22 +366,10 @@ Calling plugin vcd.so.
 
                  1                   2                   3
 
-    1     2.66407132044723   -10.15697220641960     1.47650662165835
-    2    -2.66407132044727    10.15697220641961     1.47650662165835
-    3    -2.85996248537888    -0.91142422944833    -1.47650662165835
-    4     2.85996248537892     0.91142422944833    -1.47650662165835
-
-
-
-  ## Exchange Gradient (Symmetry 0) ##
-  Irrep: 1 Size: 4 x 3
-
-                 1                   2                   3
-
-    1    -0.31149069959825     0.30439593043980    -0.15709573841052
-    2     0.31149069959825    -0.30439593043980    -0.15709573841052
-    3     0.30241104151998     0.06548117488820     0.15709573841052
-    4    -0.30241104151999    -0.06548117488820     0.15709573841052
+    1     2.35258062084898    -9.85257627597980     1.31941088324783
+    2    -2.35258062084902     9.85257627597980     1.31941088324783
+    3    -2.55755144385890    -0.84594305456013    -1.31941088324783
+    4     2.55755144385893     0.84594305456012    -1.31941088324783
 
 
 
@@ -835,7 +823,7 @@ Calling plugin vcd.so.
 
 
 
-    Psi4 stopped on: Sunday, 08 November 2020 12:07PM
-    Psi4 wall time for execution: 0:00:01.13
+    Psi4 stopped on: Sunday, 08 November 2020 07:38PM
+    Psi4 wall time for execution: 0:00:00.81
 
 *** Psi4 exiting successfully. Buy a developer a beer!
