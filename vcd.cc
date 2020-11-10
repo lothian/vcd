@@ -198,11 +198,10 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
   // ====================
   // Derivative integrals
   // ====================
-  std::vector<SharedMatrix> S_deriv;
-  std::vector<SharedMatrix> h_deriv;
-  std::vector<SharedMatrix> F_deriv;
-  std::vector<SharedMatrix> L_deriv;
-
+  std::vector<SharedMatrix> S_deriv1;
+  std::vector<SharedMatrix> h_deriv1;
+  std::vector<SharedMatrix> F_deriv1;
+  std::vector<SharedMatrix> L_deriv1;
   {
     std::vector<SharedMatrix> dS;
     std::vector<SharedMatrix> dh;
@@ -220,12 +219,12 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 
         std::string s = "Overlap Integral Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
         dS[coord]->set_name(s);
-        S_deriv.push_back(dS[coord]->clone());
+        S_deriv1.push_back(dS[coord]->clone());
 	
         s = "Core Hamiltonian Integral Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
         dh[coord]->set_name(s);
         dh[coord]->add(dV[coord]);
-	h_deriv.push_back(dh[coord]->clone());
+	h_deriv1.push_back(dh[coord]->clone());
 
         // Build spin adapted TEI derivs for current coordinate
         for(int p=0; p < nmo; p++) {
@@ -245,23 +244,23 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
 	}
         s = "Spin-Adapted TEI Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
 	dL->set_name(s);
-	L_deriv.push_back(dL->clone());
+	L_deriv1.push_back(dL->clone());
 
         // Build skeleton Fock derivs
         for(int p=0; p < nmo; p++) {
           for(int q=0; q < nmo; q++) {
-            double val = h_deriv[R_coord]->get(p,q);
+            double val = h_deriv1[R_coord]->get(p,q);
             for(int i=0; i < no; i++) {
               int pi = p * nmo + i;
               int qi = q * nmo + i;
-              val += L_deriv[R_coord]->get(pi,qi);
+              val += L_deriv1[R_coord]->get(pi,qi);
             }
             dF->set(p, q, val);
           } // q
         } // p
         s = "Skeleton Fock Derivative (" + to_string(atom) + ", " + to_string(coord) + ")";
         dF->set_name(s);
-        F_deriv.push_back(dF->clone());
+        F_deriv1.push_back(dF->clone());
 
       } // coord
     } // atom
@@ -284,14 +283,14 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
       double gradS = 0.0;
       double grad2 = 0.0;
       for(int i=0; i < no; i++) {
-        grad1 += 2.0 * h_deriv[R_coord]->get(i,i);
-        gradS -= 2.0 * S_deriv[R_coord]->get(i,i) * f->get(i,i);
+        grad1 += 2.0 * h_deriv1[R_coord]->get(i,i);
+        gradS -= 2.0 * S_deriv1[R_coord]->get(i,i) * f->get(i,i);
         int ii = i * nmo + i;
         for(int j=0; j < no; j++) {
           int jj = j * nmo + j;
           int ij = i * nmo + j;
           int ji = j * nmo + i;
-          grad2 += L_deriv[R_coord]->get(ij,ij);
+          grad2 += L_deriv1[R_coord]->get(ij,ij);
         } // j
       } // i
       grad_one->set(atom, coord, grad1);
@@ -349,15 +348,15 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
         // CPHF B vector
         for(int a=0; a < nv; a++) {
           for(int i=0; i < no; i++) {
-            double val = F_deriv[R_coord]->get(a+no, i);
-            val -= S_deriv[R_coord]->get(a+no, i) * f->get(i, i);
+            double val = F_deriv1[R_coord]->get(a+no, i);
+            val -= S_deriv1[R_coord]->get(a+no, i) * f->get(i, i);
             for(int m=0; m < no; m++)
               for(int n=0; n < no; n++) {
                 int am = (a + no) * nmo + m;
                 int an = (a + no) * nmo + n;
                 int im = i * nmo + m;
                 int in = i * nmo + n;
-                val -= 0.5 * S_deriv[R_coord]->get(m,n) * (L->get(am,in) + L->get(an,im));
+                val -= 0.5 * S_deriv1[R_coord]->get(m,n) * (L->get(am,in) + L->get(an,im));
               }
             B->set(a, i, -val);
           }
@@ -459,14 +458,11 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     // HF APTs
     // ================================================
   {
-    SharedMatrix APT1(new Matrix("APT Total (Formulation 1)", natom*3, 3));
-    SharedMatrix APT2(new Matrix("APT Total (Formulation 2)", natom*3, 3));
+    SharedMatrix APT(new Matrix("APT Total", natom*3, 3));
 
     // Contribution of skeleton derivative integrals
-    SharedMatrix APT_e1 = mints->dipole_grad(ref->Da_subset("AO"));
-    SharedMatrix APT_e2 = mints->dipole_grad(ref->Da_subset("AO"));
-    APT_e1->scale(2.0);
-    APT_e2->scale(2.0);
+    SharedMatrix APT_elec = mints->dipole_grad(ref->Da_subset("AO"));
+    APT_elec->scale(2.0);
 
     std::vector<SharedMatrix> Mu = mints->ao_dipole();
     for(int coord=0; coord < 3; coord++) Mu[coord]->transform(ref->Ca());
@@ -480,46 +476,17 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
           double val=0;
           for(int i=0; i < no; i++) {
             for(int j=0; j < no; j++) {
-              val += -2.0 * S_deriv[R_coord]->get(i,j) * Mu[dip_coord]->get(i,j);
+              val += -2.0 * S_deriv1[R_coord]->get(i,j) * Mu[dip_coord]->get(i,j);
             } 
           }
-          APT_e1->add(R_coord, dip_coord, val);
 
           // Contribution of CPHF(R) coefficients
-          val=0;
           for(int a=0; a < nv; a++) {
             for(int i=0; i < no; i++) {
               val += +4.0 * U_R[R_coord]->get(a,i) * Mu[dip_coord]->get(a+no,i);
             }
           }
-          APT_e1->add(R_coord, dip_coord, val);
-
-          // Contribution of CPHF(F) coefficients
-          val=0;
-          for(int a=0; a < nv; a++) {
-            for(int i=0; i < no; i++) {
-              val -= 4.0 * U_F[dip_coord]->get(a,i) * F_deriv[R_coord]->get(a+no,i);
-              val += 4.0 * U_F[dip_coord]->get(a,i) * S_deriv[R_coord]->get(a+no,i)  * f->get(i,i);
-            }
-          }
-          APT_e2->add(R_coord, dip_coord, val);
-
-          // Contribution of overlap derivatives
-          val=0;
-          for(int i=0; i < no; i++) val -= 2.0 * S_deriv[R_coord]->get(i,i) * Mu[dip_coord]->get(i,i);
-          APT_e2->add(R_coord, dip_coord, val);
-
-          val=0;
-          for(int i=0; i < no; i++) {
-            for(int e=0; e < nv; e++) {
-              int ie = i * nmo + (e + no);
-              for(int m=0; m < no; m++) {
-                int im = i * nmo + m; 
-                val += 4.0 * U_F[dip_coord]->get(e,m) * L->get(ie,im) * S_deriv[R_coord]->get(i,i);
-              }
-            }
-          }
-          APT_e2->add(R_coord, dip_coord, val);
+          APT_elec->add(R_coord, dip_coord, val);
 
         } // dip_coord
       } // atom coord
@@ -535,13 +502,9 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     }
     APT_n->print();
 
-    APT1->add(APT_e1);
-    APT1->add(APT_n);
-    APT1->print();
-
-    APT2->add(APT_e2);
-    APT2->add(APT_n);
-    APT2->print();
+    APT->add(APT_elec);
+    APT->add(APT_n);
+    APT->print();
   }
 
   {
