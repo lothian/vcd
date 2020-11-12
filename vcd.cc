@@ -65,6 +65,7 @@ int read_options(std::string name, Options& options)
     options.add_int("MAXITER", 100);
     options.add_bool("DIIS", true);
     options.add_double("R_CONVERGENCE", 1e-7);
+    options.add_str("AAT_TYPE", "ANALYTIC", "NUMERICAL");
   }
 
   return true;
