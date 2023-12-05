@@ -21,8 +21,8 @@ MP2Wfn::MP2Wfn(shared_ptr<Wavefunction> reference, shared_ptr<Hamiltonian> H,
   int nfrzv = 0;
   no_ = nv_ = 0;
   for(int i=0; i < nirrep_; i++) {
-    no_ += doccpi_[i] - frzcpi_[i];
-    nv_ += nmopi_[i] - doccpi_[i] - frzvpi_[i];
+    no_ += doccpi()[i] - frzcpi_[i];
+    nv_ += nmopi_[i] - doccpi()[i] - frzvpi_[i];
     nfrzv += frzvpi_[i];
   }
 
@@ -41,7 +41,7 @@ MP2Wfn::MP2Wfn(shared_ptr<Wavefunction> reference, shared_ptr<Hamiltonian> H,
   outfile->Printf("\t-----\t-----\t------\t------\t------\t------\n");
   for(int i=0; i < nirrep_; i++) {
       outfile->Printf("\t %s\t   %d\t    %d\t    %d\t    %d\t    %d\n",
-              labels[i].c_str(),nmopi_[i],frzcpi_[i],doccpi_[i],nmopi_[i]-doccpi_[i],frzvpi_[i]);
+              labels[i].c_str(),nmopi_[i],frzcpi_[i],doccpi()[i],nmopi_[i]-doccpi()[i],frzvpi_[i]);
     }
   outfile->Printf("\n\tNuclear Repulsion Energy    = %20.15f\n", molecule_->nuclear_repulsion_energy(reference_wavefunction_->get_dipole_field_strength()));
   outfile->Printf( "\tFrozen Core Energy          = %20.15f\n", H_->efzc_);
