@@ -513,6 +513,11 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
     // HF AATs
     // ================================================
 
+    double psi_dipmom_au2si = 8.478353552E-30;
+    double psi_hbar = 1.054571800E-34;
+    double psi_m2angstroms = 1.0E10;
+    double aatconv = psi_dipmom_au2si * (1 / psi_hbar) * (1 / psi_m2angstroms) * 1.0E6;
+
     std::vector<SharedMatrix> halfS_deriv;
     SharedMatrix halfdS(new Matrix("Half-Derivative Overlap", no, nv));
     SharedMatrix AAT_elec(new Matrix("AAT Electronic Component", natom*3, 3));
@@ -546,13 +551,28 @@ SharedWavefunction vcd(SharedWavefunction ref, Options& options)
       } // coord (R)
     } // atom
 
+    // AAT_elec * psi_dipmom_au2si * (1 / psi_hbar) * (1 / psi_m2angstroms) * 10**6
+
+    outfile->Printf("\n\t*******************\n");
+    outfile->Printf(  "\t** Atomic Units: **\n");
+    outfile->Printf(  "\t*******************\n\n");
     AAT_elec->print();
     AAT_nuc->print();
-
     SharedMatrix AAT(new Matrix("AAT Total", natom*3, 3));
     AAT->add(AAT_elec);
     AAT->add(AAT_nuc);
     AAT->print();
+
+    outfile->Printf("\n\t**********************\n");
+    outfile->Printf(  "\t** T^-1 A^_1 Units: **\n");
+    outfile->Printf(  "\t**********************\n\n");
+    AAT_elec->scale(aatconv);
+    AAT_elec->print();
+    AAT_nuc->scale(aatconv);
+    AAT_nuc->print();
+    AAT->scale(aatconv);
+    AAT->print();
+
   }
   
   return ref;
